@@ -1,6 +1,6 @@
 library(ggplot2)
 
-load("Res_all_100var_n2.RData")
+load("Res_all_100var_100k.RData")
 CV_arr = array(unlist(CV), dim = c(7, 8, 100)) #7 vs 13
 CV_avg = apply(CV_arr, c(1,2), mean)
 noquote(paste0(round(t(CV_avg*100),2)[1,c(1,6,3)], "%&"))
@@ -28,7 +28,7 @@ RES_sd = as.data.frame(RES_sd)
 # RES_CI1 = as.data.frame(RES_CI1)
 # RES_CI2 = as.data.frame(RES_CI2)
 colnames(RES_avg) = colnames(RES_sd) = #colnames(RES_CI1) = colnames(RES_CI2) = 
-  c("GMSE :: Linearized", "GMSE :: Monte Carlo", "GMSE :: Bootstrap")
+  c("GMSE :: Linearised", "GMSE :: Monte Carlo", "GMSE :: Bootstrap")
 
 titstu = c("1 Illiterate",
            "2 Literate but no education",
@@ -41,8 +41,8 @@ titstu = c("1 Illiterate",
 RES_avg$tit = RES_sd$tit = #RES_CI1$tit = RES_CI2$tit = 
   c(titstu[1:5], "6 Bachelor", "7 Master", "8 Phd")
 
-var_n = c("GMSE :: Monte Carlo", "GMSE :: Linearized", "GMSE :: Bootstrap")#, "GMSE :: P-Bootstrap")
-labels_n = c("GMSE :: Monte Carlo", "GMSE :: Linearized", "GMSE :: Bootstrap")#, "GMSE :: P-Bootstrap")
+var_n = c("GMSE :: Monte Carlo", "GMSE :: Linearised", "GMSE :: Bootstrap")#, "GMSE :: P-Bootstrap")
+labels_n = c("GMSE :: Monte Carlo", "GMSE :: Linearised", "GMSE :: Bootstrap")#, "GMSE :: P-Bootstrap")
 
 df <- reshape2::melt(RES_avg, id.var='tit')
 df_var <- reshape2::melt(RES_sd, id.var='tit')
@@ -112,3 +112,17 @@ ggplot(CV_df, aes(x=Education, y=CV, fill=GMSE)) +
   #scale_fill_brewer(palette="Dark2")#+
   #scale_shape_manual(" ",values=c(19, 19, 19),breaks=var_n, labels=labels_n)+
 
+
+
+# Without bootstrap -------------------------------------------------------
+
+
+ggplot(CV_df[CV_df$GMSE %in% c("GMSE :: Linearised", "GMSE :: Monte Carlo"), ], 
+       aes(x = Education, y = CV, fill = GMSE)) + 
+  geom_boxplot(alpha = 0.7) +
+  theme_classic() +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  ylab("CV (%)") + ylim(0, 40) +
+  xlab("Attained Education") +
+  ggtitle("Estimated CV by education class") +
+  scale_fill_manual(values = c("#00BFC4", "red"))
