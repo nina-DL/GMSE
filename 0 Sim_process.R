@@ -1,4 +1,4 @@
-# Latest version: 05-11-24
+# Latest version: 08-06-26
 # This script estimates the model coefficients from the ISTAT dataset (variables, their distribution and association patterns with Y)
 # and uses them as "true" coefficients for simulating the data. 
 
@@ -10,21 +10,9 @@
 # Use this code to import the DB directly from Gdrive
 library(googledrive)
 
-# Authenticate and get the file ID
-drive_auth()  # Follow the authentication process
-
-# Replace 'YOUR_FILE_ID' with the actual file ID from the Google Drive link
-file_id = "1VZHnYcv8ghyaaGMZcHS9a2HhlvPupHIg"
-# Create a temporary file to download the dataset
-temp_file = tempfile(fileext = ".xlsx")
-# Download the file
-drive_download(as_id(file_id), path = temp_file)
-# Read the dataset into R
-dati_ISTAT = read.delim(temp_file)
-# Clean up: Delete the temporary file
-unlink(temp_file)
-rm(file_id, temp_file)
-
+link <- "https://drive.google.com/file/d/13x3AQYuLZFT0W6mOfejon1Zz2yfXbz1Y/view"
+drive_download(as_id(link), path = "DatiSintetici_v2.txt", overwrite = TRUE)
+dati_ISTAT <- read.delim("DatiSintetici_v2.txt")
 
 # Create age variable (in class format) + Unify some age classes
 dati_ISTAT$cleta_19_new = ((dati_ISTAT$cleta_19==5)|(dati_ISTAT$cleta_19==6)|(dati_ISTAT$cleta_19==7)|(dati_ISTAT$cleta_19==8)|(dati_ISTAT$cleta_19==9)|(dati_ISTAT$cleta_19==10))*10 + (dati_ISTAT$cleta_19>10)*dati_ISTAT$cleta_19
