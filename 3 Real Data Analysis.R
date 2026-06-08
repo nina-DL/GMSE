@@ -1,4 +1,4 @@
-# Latest version: 02-11-24
+# Latest version: 01-06-26
 # This script implements the GMSE in the real ISTAT dataset (variables, their distribution and association patterns with Y)
 
 require(nnet)
@@ -7,8 +7,6 @@ library(MASS)
 library(svMisc) #progress
 
 require(ggplot2)
-#require(reshape2)
-#require(MNLpred)
 library(dplyr)
 library(matlib)
 require(foreign)
@@ -22,21 +20,9 @@ require(foreign)
 # Use this code to import the DB directly from Gdrive
 library(googledrive)
 
-# Authenticate and get the file ID
-drive_auth()  # Follow the authentication process
-
-# Replace 'YOUR_FILE_ID' with the actual file ID from the Google Drive link
-file_id = "1VZHnYcv8ghyaaGMZcHS9a2HhlvPupHIg"
-# Create a temporary file to download the dataset
-temp_file = tempfile(fileext = ".xlsx")
-# Download the file
-drive_download(as_id(file_id), path = temp_file)
-# Read the dataset into R
-dati_ISTAT = read.delim(temp_file)
-# Clean up: Delete the temporary file
-unlink(temp_file)
-rm(file_id, temp_file)
-
+link <- "https://drive.google.com/file/d/13x3AQYuLZFT0W6mOfejon1Zz2yfXbz1Y/view"
+drive_download(as_id(link), path = "DatiSintetici_v2.txt", overwrite = TRUE)
+dati_ISTAT <- read.delim("DatiSintetici_v2.txt")
 
 # Create age variable (in class format) + Unify some age classes
 dati_ISTAT$cleta_19_new = ((dati_ISTAT$cleta_19==5)|(dati_ISTAT$cleta_19==6)|(dati_ISTAT$cleta_19==7)|(dati_ISTAT$cleta_19==8)|(dati_ISTAT$cleta_19==9)|(dati_ISTAT$cleta_19==10))*10 + (dati_ISTAT$cleta_19>10)*dati_ISTAT$cleta_19
@@ -135,7 +121,7 @@ ggplot(full_data, aes(fill=Gender, y=Count, x=Education)) +
   theme_ipsum() +
   geom_label(aes(label = after_stat(y), group = Education), 
             stat = 'summary', fun = sum, hjust = -.5, position = position_stack(vjust = 0.7),
-            alpha = .5, show_guide  = FALSE) +
+            alpha = .5, show.legend  = FALSE) +
   theme(legend.position="bottom") +
   xlab("")
 
@@ -143,7 +129,7 @@ round(table(sample_data$y_true)[titstu]/round(apply(p_est, 2, sum), 0), 3)*100
 
 # Load necessary data and functions for Accuracy estimation--------------------------------
 
-#source("1 Main_functions_mc.R")
+source("1 Main_functions.R")
 
 # Getting accuracy estimates: GMSE vs Boot  ---------------------------------------------------
 
@@ -156,34 +142,48 @@ ISTAT_data = dati_ISTAT_red
 X_design = get_design(ISTAT_data, intercept = T)
 
 ISTAT_data$lambda = ISTAT_data$fl_MS
+
 # Analytic GMSE: v2 (short)
-GMSE_Analytic_Res = GMSE_short(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, domain = "all", env = environment())
-Ysum_Analytic = round(GMSE_Analytic_Res$theta.hat, 0)
+resAnalytic = GMSE_short(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, domain = "all", env = environment())
+Ysum_Analytic = round(resAnalytic$theta.hat, 0)
 apply(sample_cat, 1, sum)
-GMSE_Analytic = round(GMSE_Analytic_Res$GMSE, 0)
-CV_Analytic = round(GMSE_Analytic_Res$CV, 4)*100
+GMSE_Analytic = round(resAnalytic$GMSE, 0)
+CV_Analytic = round(resAnalytic$CV, 4)*100
 
+# Bootstrap GMSE
+resBoot = NPBoot_Accuracy(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, 
+                          gamma = "all", B = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_Boot = round(resBoot$Boot_GMSE[1,], 0)
+CV_Boot = round(resBoot$Boot_CV[1,], 4)*100
 
-sim_seed = 2024; seed_cov = 123; p.true = p_est
-resBoot = Boot_Accuracy(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, gamma = "all", 
-                          B = 1000, env = environment())
+# Design-based GMSE
+resDesign = Design_based(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, 
+                         gamma = "all", M_design = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_Design = round(resDesign$Design_GMSE[1,], 0)
+CV_Design = round(resDesign$Design_CV[1,], 4)*100
 
-GMSE_Boot = round(resBoot[5:7,], 0)
-CV_Boot = round(resBoot[12:14,], 4)*100
+# Model-based GMSE
+resModel = Model_based(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, 
+                       gamma = "all",  M_model = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_Model = round(resModel$Model_GMSE[1,], 0)
+CV_Model = round(resModel$Model_CV[1,], 4)*100
 
+GMSE = rbind(GMSE_Analytic = GMSE_Analytic, GMSE_Boot, GMSE_Design, GMSE_Model)
+CV = rbind(CV_Analytic = CV_Analytic, CV_Boot, CV_Design, CV_Model)
 
-
-GMSE = rbind(GMSE_Analytic = prova$GMSE_Analytic, prova$GMSE_MC, prova$GMSE_Boot, prova$GMSE_Boot2, prova$GMSE_PBoot)
-CV = rbind(CV_Analytic = prova$CV_Analytic, prova$CV_MC, prova$CV_Boot, prova$CV_Boot2, prova$CV_PBoot)
-
+t(GMSE)
+t(CV)
 
 # Accuracy estimates by internal domain M/F: GMSE vs Boot  ---------------------------------------------------
 
 # Analytic GMSE: v2 (short)
 GMSE_Analytic_ResM = GMSE_short(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, domain = "SESSO", env = environment())
 XX = round(GMSE_Analytic_ResM$theta.hat, 0)
-XX = sample_cat
-round(GMSE_Analytic_ResM$GMSE, 0)
+# XX = sample_cat
+GMSE_AnalyticM = round(GMSE_Analytic_ResM$GMSE[1,], 4)
+CV_AnalyticM = round(GMSE_Analytic_ResM$CV[1,], 4)*100
+GMSE_AnalyticF = round(GMSE_Analytic_ResM$GMSE[2,], 4)
+CV_AnalyticF = round(GMSE_Analytic_ResM$CV[2,], 4)*100
 YY = log(round(GMSE_Analytic_ResM$CV, 4)*100)
 
 df1 <- reshape2::melt(XX, c("Education", "Gender"), value.name = "Count")
@@ -207,22 +207,48 @@ ggplot(df, aes(x = Count, y = CV, color = Education,
 # t(matrix(round(GMSE_Analytic_ResM$GMSE, 0)[2,]))
 # t(matrix(round(GMSE_Analytic_ResM$CV[2,], 4)*100))
 
-sim_seed = 2024; seed_cov = 123; p.true = p_est
-resBootM = Boot_Accuracy(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, gamma = ifelse(ISTAT_data$SESSO=="M", 1, 0), 
-                        B = 10000, env = environment())
+resBootM = NPBoot_Accuracy(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, gamma = ifelse(ISTAT_data$SESSO=="M", 1, 0), 
+                           B = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_BootM = round(resBootM$Boot_GMSE[1,],0)
+CV_BootM = round(resBootM$Boot_CV[1,], 4)*100
 
-GMSE_BootM = round(resBootM[5:7,],0)
-CV_BootM = round(resBootM[12:14,]*100, 2)
+resBootF = NPBoot_Accuracy(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, gamma = ifelse(ISTAT_data$SESSO=="F", 1, 0), 
+                           B = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_BootF = round(resBootF$Boot_GMSE[1,],0)
+CV_BootF = round(resBootF$Boot_CV[1,], 4)*100
+
+resDesignM = Design_based(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k,  gamma = ifelse(ISTAT_data$SESSO=="M", 1, 0),
+                          M_design = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_DesignM = round(resDesignM$Design_GMSE[1,], 0)
+CV_DesignM = round(resDesignM$Design_CV[1,], 4)*100
+
+resDesignF = Design_based(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k,  gamma = ifelse(ISTAT_data$SESSO=="F", 1, 0),
+                          M_design = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_DesignF = round(resDesignF$Design_GMSE[1,], 0)
+CV_DesignF = round(resDesignF$Design_CV[1,], 4)*100
+
+resModelM = Model_based(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k,  gamma = ifelse(ISTAT_data$SESSO=="M", 1, 0),
+                       M_model = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_ModelM = round(resModelM$Model_GMSE[1,], 0)
+CV_ModelM = round(resModelM$Model_CV[1,], 4)*100
+
+resModelF = Model_based(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k,  gamma = ifelse(ISTAT_data$SESSO=="F", 1, 0),
+                        M_model = 1000, env = environment(), true_model = mod_fit_ISTAT)
+GMSE_ModelF = round(resModelF$Model_GMSE[1,], 0)
+CV_ModelF = round(resModelF$Model_CV[1,], 4)*100
 
 
-sim_seed = 2024; seed_cov = 123; p.true = p_est
-resBootF = Boot_Accuracy(Sim_data = ISTAT_data, X_design = X_design, ref_k = ref_k, gamma = ifelse(ISTAT_data$SESSO=="F", 1, 0), 
-                         B = 1000, env = environment())
+GMSE_M = rbind(GMSE_Analytic = GMSE_AnalyticM, GMSE_BootM, GMSE_DesignM, GMSE_ModelM)
+GMSE_F = rbind(GMSE_Analytic = GMSE_AnalyticF, GMSE_BootF, GMSE_DesignF, GMSE_ModelF)
+CV_M = rbind(CV_Analytic = CV_AnalyticM, CV_BootM, CV_DesignM, CV_ModelM)
+CV_F = rbind(CV_Analytic = CV_AnalyticF, CV_BootF, CV_DesignF, CV_ModelF)
 
-GMSE_BootF = round(resBootF[5:7,],0)
-CV_BootF = round(resBootF[12:14,]*100, 2)
+t(GMSE_M)
+t(GMSE_F)
+t(CV_M)
+t(CV_F)
 
-# Accuracy estimates by external domain "Municipality" ---------------------------------------------------
+# Accuracy estimates by external domain "Municipality" (Analytic only) ---------------------------------------------------
 
 
 # Analytic GMSE: v2 (short)
